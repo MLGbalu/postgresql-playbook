@@ -1,0 +1,218 @@
+---
+- name: 'Initial install and configuration'
+  become: true
+  hosts: postgres
+  vars:
+    postgres_users_no_log: false # включаем отображение паролей в консоле для отладки, само собой в продакшене это надо выключить
+    postgresql_users:
+      - name: postgres
+        password: password
+
+  pre_tasks: # запускаем таски ПЕРЕД ролями и перед основными тасками
+  - name: "Exclude server from production" # исключим севрвера из ротации на продакшене (например правим записи в балансировщике нагрузки)
+    delegate_to: 127.0.0.1 # делаем с нашей машины, можно так же использовать директиву local_action
+    script: '/home/vagrant/exclude_from_prod.py' # запускаем скрипт
+    register: command_result # сохраняем его вывод
+    failed_when: "'error' in command_result.stdout" # проверяем есть ли строки которые нас интересуют в выводе
+    changed_when: "'success' in command_result.stdout"
+
+  tasks:
+  # включаем таски из роли
+  - name: "Initialise variables"
+    include_role:
+      name: geerlingguy.postgresql
+      tasks_from: variables
+
+  - name: "Setup postgres"
+    include_role:
+      name: geerlingguy.postgresql
+      tasks_from: setup-RedHat
+
+  - name: "Init postgres"
+    include_role:
+      name: geerlingguy.postgresql
+      tasks_from: initialize
+
+
+  - name: Start PostgreSQL server
+    systemd:
+      name: "{{ postgresql_daemon }}"
+      state: started
+
+  - name: "Configure postgres"
+    include_role:
+      name: geerlingguy.postgresql
+      tasks_from: configure
+
+  - name: "Configure users"
+    include_role:
+      name: geerlingguy.postgresql
+      tasks_from: users
+# здесь можно сократить плейбук используя loop, подумайте как
+
+- name: "Setup master"
+  become: true
+  become_method: sudo
+  hosts: postgres:!postgres_slaves # исключаем слейвы
+  vars:
+    replica_password: "replica123"
+    postgres_master_ip: "{{ hostvars['postgres_master']['ansible_host'] }}" # hostvars берутся и из инвентори, таким образом мы можем использовать указанные нами ip даже без gather_facts
+    postgres_slave_ip: "{{ hostvars['postgres_slave']['ansible_host'] }}"
+    postgres_connection_ip: "192.168.51.1"
+
+  tasks:
+  - name: "Update postgresql.conf"
+    lineinfile: # замена одной строки в файле по регулярному выражению. Регулярные выражения сложная штука, но рекомендую их практиковать, сохраняет много времени и сил
+      path: "{{ postgresql_config_path }}/postgresql.conf"
+      regexp: "{{ item.regexp }}"
+      line: "{{ item.line }}"
+    with_items:
+    - regexp: "#listen_addresses = 'localhost'" # само регулярное выражение (в этом случае просто строка)
+      line: "listen_addresses = '{{ postgres_master_ip }}'" # замена
+    - regexp: "#wal_level = minimal"
+      line: "wal_level = hot_standby"
+    - regexp: "#synchronous_commit = on"
+      line: "synchronous_commit = local"
+    - regexp: "#archive_mode = off"
+      line: "archive_mode = on"
+    - regexp: "#archive_command = ''"
+      line: "archive_command = 'cp %p /var/lib/pgsql/{{ postgresql_version }}/archive/%f'"
+    - regexp: "#max_wal_senders = 0"
+      line: "max_wal_senders = 2"
+    - regexp: "#wal_keep_segments = 0"
+      line: "wal_keep_segments = 2"
+    - regexp: "#synchronous_standby_names = ''"
+      line: "synchronous_standby_names = 'slave01'"
+
+  - name: "Create archive directory"
+    file:
+      path: /var/lib/pgsql/{{ postgresql_version }}/archive
+      mode: 0700
+      owner: postgres
+      group: postgres
+      state: directory
+
+  - name: "Update pg_hba.conf"
+    blockinfile: # блоковая замена, Ансибл сам заменит блок в файле и создаст маркер, для кастомных маркеров (чтобы случайно ничего не перезаписать) рекомендую использовать атрибут marker
+      path: "{{ postgresql_config_path }}/pg_hba.conf"
+      insertafter: "#host replication postgres ::1/128 ident"
+      block: | # сам блок, | показывает yaml что дальше идет текст с переносами
+        host replication repluser 127.0.0.1/32 md5
+        host replication repluser {{ postgres_master_ip }}/32 md5
+        host replication repluser {{ postgres_slave_ip }}/32 md5
+        host all postgres {{ postgres_connection_ip }}/32 md5
+
+  - name: "Create replication user" # создадим юзера для репликации
+    postgresql_user:
+      name: "repluser"
+      role_attr_flags: "REPLICATION,LOGIN" # постгрес требует указать атрибут REPLICA чтобы пользователь мог реплицировать данные
+      password: "{{ replica_password }}"
+    become: true
+    become_user: postgres
+    become_method: sudo
+
+  - name: Restart PostgreSQL server
+    ansible.builtin.service:
+      name: "{{ postgresql_daemon }}"
+      state: restarted
+      enabled: yes
+
+
+- name: "Setup pgslave"
+  hosts: postgres_slaves
+  become: true
+  become_method: sudo
+  gather_facts: yes
+  vars:
+    replica_password: 'replica123'
+    postgres_master_ip: "{{ hostvars['postgres_master']['ansible_host'] }}"
+    postgres_slave_ip: "{{ hostvars['postgres_slave']['ansible_host'] }}"
+
+
+  tasks:
+  - name: "Stop PostgreSQL server"
+    systemd:
+      name: "{{ postgresql_daemon }}"
+      state: stopped
+
+  - name: Move data backup
+    shell: mv data data-backup # к сожалению только шелл
+    args:
+      chdir: "{{ postgresql_data_dir }}/.."
+
+  - name: "Setting slave with a possible rollback"
+    block: # несколько тасок, с откатом если что то незапланированое произошло
+      - name: Create data directory
+        file:
+          path: "{{ postgresql_data_dir }}"
+          mode: 0700
+          owner: postgres
+          group: postgres
+          state: directory
+
+      - name: Backup initial data from master # делаем репликацию с мастера
+        shell: "PGPASSWORD={{ replica_password }} pg_basebackup -w -h {{ postgres_master_ip }} -U repluser -D {{postgresql_data_dir}} -P --xlog"
+        become_user: "postgres"
+        become: true
+
+      - name: Update {{ __postgresql_config_path }}/postgresql.conf
+        lineinfile:
+          path: "{{ postgresql_config_path }}/postgresql.conf"
+          regexp: "{{ item.regexp }}"
+          line: "{{ item.line }}"
+        with_items:
+        - { regexp: "#listen_addresses = 'localhost'", line: "listen_addresses = '{{ postgres_slave_ip }}'" } # делаем инстанс hot_standby - автозабор данных с мастера
+        - { regexp: "#hot_standby = off", line: "hot_standby = on" }
+
+      - name: Create recovery.conf
+        blockinfile:
+          path: "{{ postgresql_config_path }}/recovery.conf" # конфигурация репликации
+          block: |
+            standby_mode = 'on'
+            primary_conninfo = 'host={{ postgres_master_ip }} port=5432 user=repluser password={{ replica_password }} application_name=slave01'
+            trigger_file = '/tmp/postgresql.trigger.5432'
+          mode: 0600
+          owner: postgres
+          group: postgres
+          state: present
+          create: yes
+
+    rescue:
+      - name: Remove altered data # если не удалось, то удаляем новую папку
+        ansible.builtin.file:
+          src: "{{ postgresql_data_dir }}"
+          state: absent
+
+      - name: Restore data backup # и откатываем бекап
+        shell: mv data-backup data
+        args:
+          chdir: "{{ postgresql_data_dir }}/.."
+    always:
+      - name: Remove backed folder
+        ansible.builtin.file: # удаляем бекап данных, слейв скорее всего создается из чистого инстанса, поэтому после установки мастер-слейв, нам он уже не нужен
+          path: "{{ postgresql_data_dir }}/../data-backup"
+          state: absent
+
+      - name: Start PostgreSQL server
+        ansible.builtin.service:
+          name: "{{ postgresql_daemon }}"
+          state: started
+
+- name: "After install"
+  become: true
+  hosts: postgres
+
+  tasks:
+  - name: Healthcheck # хелсчек, забираем версию с постгрес.
+    postgresql_query:
+      query: SELECT version()
+    become: true
+    become_user: postgres
+
+  post_tasks:
+  - name: "Include server to production" # включаем сервер в продакшен, запустив уже другой скрипт на локальной машине
+    delegate_to: 127.0.0.1
+    script: '/home/vagrant/include_to_prod.py {{ansible_host}}'
+    register: command_result
+    failed_when: "'error' in command_result.stdout"
+    changed_when: "'success' in command_result.stdout"
