@@ -10,9 +10,9 @@ postgresql_version: "12"
 postgres_users_no_log: true
 
 # Базовые пользователи PostgreSQL
-postgresql_users:
-  - name: postgres
-    password: "{{ vault_postgres_password }}"  # Пароль из vault (будет создан позже)
+# ПРИМЕЧАНИЕ: Пользователь postgres создается автоматически при установке
+# Для изменения его пароля используйте ALTER USER в psql
+postgresql_users: []  # Пустой список - пользователи создаются в кастомной роли
 
 # === Пути (для Debian/Ubuntu) ===
 # BEST PRACTICE: Явно указываем пути для предсказуемости
