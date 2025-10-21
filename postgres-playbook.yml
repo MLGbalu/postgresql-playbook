@@ -1,21 +1,14 @@
 ---
 - name: 'Initial install and configuration'
   become: true
-  hosts: postgres
+  hosts: all
   vars:
     postgres_users_no_log: false # включаем отображение паролей в консоле для отладки, само собой в продакшене это надо выключить
     postgresql_users:
       - name: postgres
         password: password
 
-  pre_tasks: # запускаем таски ПЕРЕД ролями и перед основными тасками
-  - name: "Exclude server from production" # исключим севрвера из ротации на продакшене (например правим записи в балансировщике нагрузки)
-    delegate_to: 127.0.0.1 # делаем с нашей машины, можно так же использовать директиву local_action
-    script: '/home/vagrant/exclude_from_prod.py' # запускаем скрипт
-    register: command_result # сохраняем его вывод
-    failed_when: "'error' in command_result.stdout" # проверяем есть ли строки которые нас интересуют в выводе
-    changed_when: "'success' in command_result.stdout"
-
+  
   tasks:
   # включаем таски из роли
   - name: "Initialise variables"
