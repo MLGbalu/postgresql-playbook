@@ -1,4 +1,14 @@
 ---
-- src: geerlingguy.postgresql
-  version: "4.0.2"
+# BEST PRACTICE: Указываем все зависимости в одном файле
+# Роли и коллекции устанавливаются одной командой
+
+# === Ansible Roles ===
+roles:
+  - name: geerlingguy.postgresql
+    version: "4.0.2"
+
+# === Ansible Collections ===
+collections:
+  - name: community.postgresql
+    version: ">=3.0.0"  # Минимальная версия с поддержкой новых модулей
 

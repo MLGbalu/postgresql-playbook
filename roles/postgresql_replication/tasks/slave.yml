@@ -1,0 +1,99 @@
+---
+# BEST PRACTICE: Отдельный файл для slave конфигурации
+# Использует block/rescue/always для безопасного rollback
+
+- name: Stop PostgreSQL on slave
+  ansible.builtin.systemd:
+    name: "{{ postgresql_daemon }}"
+    state: stopped
+  tags:
+    - postgres_slave
+    - replication
+
+- name: Backup existing data directory
+  # BEST PRACTICE: command вместо shell когда не нужны shell features
+  ansible.builtin.command:
+    cmd: mv data data-backup
+    chdir: "{{ postgresql_data_dir }}/.."
+    # BEST PRACTICE: creates предотвращает повторное выполнение
+    creates: "{{ postgresql_data_dir }}/../data-backup"
+  tags:
+    - postgres_slave
+    - replication
+
+- name: Configure slave with rollback capability
+  # BEST PRACTICE: block/rescue/always для error handling
+  block:
+    - name: Create fresh data directory
+      ansible.builtin.file:
+        path: "{{ postgresql_data_dir }}"
+        state: directory
+        mode: '0700'
+        owner: postgres
+        group: postgres
+
+    - name: Replicate data from master using pg_basebackup
+      # BEST PRACTICE: environment для передачи sensitive данных
+      ansible.builtin.shell: |
+        pg_basebackup -w -h {{ postgres_master_ip }} -U repluser -D {{ postgresql_data_dir }} -P --xlog
+      environment:
+        PGPASSWORD: "{{ replica_password }}"
+      become: true
+      become_user: postgres
+      no_log: "{{ postgres_users_no_log }}"
+      # BEST PRACTICE: Таймаут для длительных операций
+      async: 1800
+      poll: 10
+
+    - name: Configure postgresql.conf for slave
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_config_path }}/postgresql.conf"
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backup: true
+      loop: "{{ postgresql_slave_config }}"
+
+    - name: Create recovery.conf from template
+      # BEST PRACTICE: template модуль вместо blockinfile
+      ansible.builtin.template:
+        src: recovery.conf.j2
+        dest: "{{ postgresql_config_path }}/recovery.conf"
+        mode: '0600'
+        owner: postgres
+        group: postgres
+        backup: true
+
+  # BEST PRACTICE: rescue блок для rollback при ошибках
+  rescue:
+    - name: Remove corrupted data directory
+      ansible.builtin.file:
+        path: "{{ postgresql_data_dir }}"
+        state: absent
+
+    - name: Restore backup
+      ansible.builtin.command:
+        cmd: mv data-backup data
+        chdir: "{{ postgresql_data_dir }}/.."
+
+    - name: Fail with clear message
+      ansible.builtin.fail:
+        msg: "Failed to configure slave replication. Backup has been restored."
+
+  # BEST PRACTICE: always блок выполняется всегда
+  always:
+    - name: Remove backup directory if exists
+      ansible.builtin.file:
+        path: "{{ postgresql_data_dir }}/../data-backup"
+        state: absent
+      # BEST PRACTICE: ignore_errors если бэкапа может не быть
+      ignore_errors: true
+
+    - name: Start PostgreSQL on slave
+      ansible.builtin.service:
+        name: "{{ postgresql_daemon }}"
+        state: started
+        enabled: true
+
+  tags:
+    - postgres_slave
+    - replication

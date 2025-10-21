@@ -1,0 +1,27 @@
+---
+# BEST PRACTICE: Переменные специфичные для слейв-серверов
+# Отдельный файл делает конфигурацию более модульной
+
+# === Настройки репликации ===
+replica_password: "{{ vault_replica_password }}"
+
+# IP адреса (из inventory)
+postgres_master_ip: "{{ hostvars['postgres_master']['ansible_host'] }}"
+postgres_slave_ip: "{{ hostvars['postgres_slave']['ansible_host'] }}"
+
+# === PostgreSQL конфигурация для Slave ===
+postgresql_slave_config:
+  # Слушать на IP слейва
+  - regexp: "#listen_addresses = 'localhost'"
+    line: "listen_addresses = '{{ postgres_slave_ip }}'"
+  
+  # Включаем hot standby для чтения со слейва
+  - regexp: "#hot_standby = off"
+    line: "hot_standby = on"
+
+# === Recovery конфигурация ===
+# BEST PRACTICE: Структурированные данные вместо многострочного текста
+recovery_config:
+  standby_mode: 'on'
+  primary_conninfo: "host={{ postgres_master_ip }} port=5432 user=repluser password={{ replica_password }} application_name=slave01"
+  trigger_file: '/tmp/postgresql.trigger.5432'

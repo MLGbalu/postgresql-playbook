@@ -1,0 +1,15 @@
+---
+# BEST PRACTICE: Пример vault файла для sensitive данных
+# Чтобы использовать:
+# 1. Скопируйте этот файл в all_vault.yml
+# 2. Замените пароли на реальные
+# 3. Зашифруйте: ansible-vault encrypt inventory/production/group_vars/all_vault.yml
+# 4. Создайте .vault_pass файл с паролем vault (добавьте в .gitignore!)
+
+# === Пароли PostgreSQL ===
+# SECURITY: Эти пароли будут зашифрованы через ansible-vault
+vault_postgres_password: "changeme_strong_password_123"
+vault_replica_password: "changeme_replica_password_456"
+
+# === Другие sensitive данные ===
+# Добавьте сюда API ключи, токены и т.д.

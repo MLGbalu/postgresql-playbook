@@ -1,0 +1,12 @@
+# BEST PRACTICE: Template для recovery.conf
+# Используется на slave серверах для настройки репликации
+# Генерируется динамически из переменных
+
+# Включаем режим standby (слейва)
+standby_mode = '{{ recovery_config.standby_mode }}'
+
+# Строка подключения к мастеру
+primary_conninfo = '{{ recovery_config.primary_conninfo }}'
+
+# Файл-триггер для промоушена слейва в мастер
+trigger_file = '{{ recovery_config.trigger_file }}'

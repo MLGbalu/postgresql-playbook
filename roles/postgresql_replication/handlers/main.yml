@@ -1,0 +1,23 @@
+---
+# BEST PRACTICE: Handlers - запускаются только при изменениях и только один раз
+# Это предотвращает лишние перезапуски сервиса
+
+- name: restart postgresql
+  ansible.builtin.service:
+    name: "{{ postgresql_daemon }}"
+    state: restarted
+  # BEST PRACTICE: Таймаут для безопасного перезапуска
+  async: 60
+  poll: 5
+
+- name: reload postgresql
+  ansible.builtin.service:
+    name: "{{ postgresql_daemon }}"
+    state: reloaded
+  # Reload быстрее чем restart, используется для изменений конфигурации
+
+- name: enable postgresql
+  ansible.builtin.service:
+    name: "{{ postgresql_daemon }}"
+    enabled: yes
+  # Автозапуск при перезагрузке сервера

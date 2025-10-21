@@ -1,0 +1,21 @@
+---
+# BEST PRACTICE: main.yml - точка входа в роль
+# Использует include_tasks для модульности и читаемости
+
+- name: Include master configuration tasks
+  ansible.builtin.include_tasks: master.yml
+  # BEST PRACTICE: when условие определяет когда запускать таски
+  when: inventory_hostname in groups['postgres_master']
+  # BEST PRACTICE: tags для выборочного запуска
+  tags:
+    - postgres
+    - postgres_master
+    - replication
+
+- name: Include slave configuration tasks
+  ansible.builtin.include_tasks: slave.yml
+  when: inventory_hostname in groups['postgres_slaves']
+  tags:
+    - postgres
+    - postgres_slave
+    - replication

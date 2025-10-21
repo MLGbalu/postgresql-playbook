@@ -1,0 +1,28 @@
+---
+# BEST PRACTICE: Общие переменные для всех хостов
+# Вынесены из playbook для повторного использования и централизованного управления
+
+# === PostgreSQL общие настройки ===
+# Версия PostgreSQL (для Ubuntu 20.04 доступны 12, 13, 14)
+postgresql_version: "12"
+
+# BEST PRACTICE: Отключаем логирование паролей в production
+postgres_users_no_log: true
+
+# Базовые пользователи PostgreSQL
+postgresql_users:
+  - name: postgres
+    password: "{{ vault_postgres_password }}"  # Пароль из vault (будет создан позже)
+
+# === Пути (для Debian/Ubuntu) ===
+# BEST PRACTICE: Явно указываем пути для предсказуемости
+postgresql_config_path: "/etc/postgresql/{{ postgresql_version }}/main"
+postgresql_data_dir: "/var/lib/postgresql/{{ postgresql_version }}/main"
+postgresql_daemon: "postgresql"
+
+# === Сетевые настройки ===
+# ВАЖНО: Укажите IP адрес вашего application server (веб-сервер, API и т.д.)
+# С этого IP будет разрешено подключение к PostgreSQL через пользователя postgres
+# Если приложение на том же сервере что и PostgreSQL, используйте 127.0.0.1
+# Если приложений несколько, можно добавить массив IP адресов
+postgres_connection_ip: "192.168.0.212"  # TODO: ЗАМЕНИТЬ НА РЕАЛЬНЫЙ IP!

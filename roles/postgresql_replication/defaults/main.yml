@@ -1,0 +1,12 @@
+---
+# BEST PRACTICE: Defaults - значения по умолчанию с низким приоритетом
+# Могут быть переопределены в group_vars или host_vars
+
+# Версия PostgreSQL по умолчанию
+postgresql_version: "12"
+
+# Тайм-аут для операций базы данных
+postgresql_operation_timeout: 300
+
+# Включить ли проверку connectivity перед настройкой репликации
+postgresql_check_connectivity: true

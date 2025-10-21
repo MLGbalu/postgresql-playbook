@@ -10,6 +10,12 @@
 
   
   tasks:
+  - name: "Install psycopg2 for PostgreSQL modules"
+    ansible.builtin.apt:
+      name: python3-psycopg2
+      state: present
+      update_cache: yes
+
   # включаем таски из роли
   - name: "Initialise variables"
     include_role:
@@ -19,7 +25,7 @@
   - name: "Setup postgres"
     include_role:
       name: geerlingguy.postgresql
-      tasks_from: setup-RedHat
+      tasks_from: setup-Debian
 
   - name: "Init postgres"
     include_role:
@@ -201,11 +207,3 @@
       query: SELECT version()
     become: true
     become_user: postgres
-
-  post_tasks:
-  - name: "Include server to production" # включаем сервер в продакшен, запустив уже другой скрипт на локальной машине
-    delegate_to: 127.0.0.1
-    script: '/home/vagrant/include_to_prod.py {{ansible_host}}'
-    register: command_result
-    failed_when: "'error' in command_result.stdout"
-    changed_when: "'success' in command_result.stdout"

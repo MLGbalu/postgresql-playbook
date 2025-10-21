@@ -1,0 +1,123 @@
+---
+# BEST PRACTICE: site.yml - главная точка входа для всего проекта
+# Организует выполнение в логическом порядке
+
+- name: Install and configure PostgreSQL on all servers
+  # BEST PRACTICE: hosts: all - устанавливаем базу на все серверы
+  hosts: all
+  become: yes
+  tags:
+    - install
+    - postgres
+
+  vars:
+    # Для отладки можно показывать пароли (ТОЛЬКО в dev окружении!)
+    postgres_users_no_log: true
+
+  tasks:
+    - name: Install psycopg2 for PostgreSQL modules
+      # BEST PRACTICE: FQCN для всех модулей
+      ansible.builtin.apt:
+        name: python3-psycopg2
+        state: present
+        update_cache: yes
+      tags:
+        - dependencies
+
+    # BEST PRACTICE: Используем внешнюю роль для базовой установки
+    - name: Initialise PostgreSQL variables
+      ansible.builtin.include_role:
+        name: geerlingguy.postgresql
+        tasks_from: variables
+      tags:
+        - postgres_install
+
+    - name: Setup PostgreSQL on Debian/Ubuntu
+      ansible.builtin.include_role:
+        name: geerlingguy.postgresql
+        tasks_from: setup-Debian
+      tags:
+        - postgres_install
+
+    - name: Initialize PostgreSQL database
+      ansible.builtin.include_role:
+        name: geerlingguy.postgresql
+        tasks_from: initialize
+      tags:
+        - postgres_install
+
+    - name: Start PostgreSQL server
+      ansible.builtin.systemd:
+        name: "{{ postgresql_daemon }}"
+        state: started
+      tags:
+        - postgres_service
+
+    - name: Configure PostgreSQL
+      ansible.builtin.include_role:
+        name: geerlingguy.postgresql
+        tasks_from: configure
+      tags:
+        - postgres_config
+
+    - name: Configure PostgreSQL users
+      ansible.builtin.include_role:
+        name: geerlingguy.postgresql
+        tasks_from: users
+      tags:
+        - postgres_users
+
+
+- name: Configure PostgreSQL replication (master and slaves)
+  # BEST PRACTICE: Отдельный play для репликации
+  hosts: postgres
+  become: yes
+  tags:
+    - replication
+    - configure
+
+  roles:
+    # BEST PRACTICE: Используем роль вместо inline tasks
+    - role: postgresql_replication
+
+
+- name: Run health checks
+  # BEST PRACTICE: Отдельный play для проверок
+  hosts: postgres
+  become: yes
+  tags:
+    - healthcheck
+    - verify
+
+  tasks:
+    - name: Check PostgreSQL version
+      community.postgresql.postgresql_query:
+        query: SELECT version()
+      become_user: postgres
+      register: pg_version
+      tags:
+        - postgres_healthcheck
+
+    - name: Display PostgreSQL version
+      ansible.builtin.debug:
+        msg: "PostgreSQL version: {{ pg_version.query_result[0].version }}"
+      tags:
+        - postgres_healthcheck
+
+    - name: Check replication status on master
+      community.postgresql.postgresql_query:
+        query: SELECT * FROM pg_stat_replication
+      become_user: postgres
+      register: replication_status
+      when: inventory_hostname in groups['postgres_master']
+      tags:
+        - replication_healthcheck
+
+    - name: Display replication status
+      ansible.builtin.debug:
+        msg: "Replication status: {{ replication_status.query_result }}"
+      when: 
+        - inventory_hostname in groups['postgres_master']
+        - replication_status.query_result | length > 0
+      tags:
+        - replication_healthcheck

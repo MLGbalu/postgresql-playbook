@@ -1,1 +1,30 @@
+# BEST PRACTICE: Gitignore для Ansible проектов
+
+# IDE
 .vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# SECURITY: Sensitive files - НИКОГДА не коммитить!
+.vault_pass
+*_vault.yml
+!*_vault.yml.example
+
+# Ansible
+*.retry
+ansible.log
+/tmp/ansible_facts/
+.ansible/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db

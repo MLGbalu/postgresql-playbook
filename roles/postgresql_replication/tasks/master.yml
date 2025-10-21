@@ -1,0 +1,70 @@
+---
+# BEST PRACTICE: Отдельный файл для master конфигурации
+# Улучшает читаемость и модульность
+
+- name: Configure postgresql.conf for master replication
+  # BEST PRACTICE: FQCN (Fully Qualified Collection Name) для всех модулей
+  ansible.builtin.lineinfile:
+    path: "{{ postgresql_config_path }}/postgresql.conf"
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    backup: yes  # BEST PRACTICE: создаем backup перед изменением
+  # BEST PRACTICE: loop вместо устаревшего with_items
+  loop: "{{ postgresql_master_config }}"
+  # BEST PRACTICE: notify вместо прямого вызова restart
+  notify: restart postgresql
+  tags:
+    - postgres_config
+    - postgres_master
+
+- name: Create PostgreSQL archive directory
+  ansible.builtin.file:
+    path: "{{ postgresql_archive_dir }}"
+    state: directory
+    mode: '0700'
+    owner: postgres
+    group: postgres
+  tags:
+    - postgres_config
+    - postgres_master
+
+- name: Configure pg_hba.conf for replication
+  ansible.builtin.blockinfile:
+    path: "{{ postgresql_config_path }}/pg_hba.conf"
+    # BEST PRACTICE: Кастомный marker чтобы не конфликтовать с другими блоками
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - REPLICATION"
+    insertafter: "#host replication postgres ::1/128 ident"
+    # BEST PRACTICE: Генерируем блок из переменных
+    block: |
+      {% for entry in postgresql_hba_entries %}
+      {{ entry }}
+      {% endfor %}
+    backup: true
+  notify: reload postgresql
+  tags:
+    - postgres_config
+    - postgres_master
+
+- name: Create replication user
+  # BEST PRACTICE: community.postgresql коллекция для PostgreSQL операций
+  community.postgresql.postgresql_user:
+    name: "{{ replication_user.name }}"
+    password: "{{ replication_user.password }}"
+    role_attr_flags: "{{ replication_user.role_attr_flags }}"
+    # BEST PRACTICE: encrypted пароли
+    encrypted: true
+  become: true
+  become_user: postgres
+  # BEST PRACTICE: no_log скрывает пароли из логов
+  no_log: "{{ postgres_users_no_log }}"
+  tags:
+    - postgres_users
+    - postgres_master
+
+- name: Ensure PostgreSQL is enabled on boot
+  ansible.builtin.service:
+    name: "{{ postgresql_daemon }}"
+    enabled: true
+  tags:
+    - postgres_service
+    - postgres_master
