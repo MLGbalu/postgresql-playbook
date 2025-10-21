@@ -37,10 +37,17 @@
     # BEST PRACTICE: Генерируем блок из переменных
     block: |
       {% for entry in postgresql_hba_entries %}
-      {{ entry }}
+      {{ entry.type }} {{ entry.database }} {{ entry.user }} {{ entry.address }} {{ entry.auth_method }}
       {% endfor %}
     backup: true
   notify: reload postgresql
+  tags:
+    - postgres_config
+    - postgres_master
+
+- name: Flush handlers to restart/reload PostgreSQL
+  # BEST PRACTICE: Принудительно выполнить handlers перед созданием пользователя
+  ansible.builtin.meta: flush_handlers
   tags:
     - postgres_config
     - postgres_master
