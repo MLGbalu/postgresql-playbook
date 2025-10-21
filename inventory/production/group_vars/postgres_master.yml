@@ -56,28 +56,28 @@ postgresql_hba_entries:
     database: replication
     user: repluser
     address: 127.0.0.1/32
-    method: md5
+    auth_method: md5
   
   # Репликация с master IP
   - type: host
     database: replication
     user: repluser
     address: "{{ postgres_master_ip }}/32"
-    method: md5
+    auth_method: md5
   
   # Репликация со slave IP
   - type: host
     database: replication
     user: repluser
     address: "{{ postgres_slave_ip }}/32"
-    method: md5
+    auth_method: md5
   
   # Подключение приложения к postgres
   - type: host
     database: all
     user: postgres
     address: "{{ postgres_connection_ip }}/32"
-    method: md5
+    auth_method: md5
 
 # Пользователь репликации
 replication_user:
