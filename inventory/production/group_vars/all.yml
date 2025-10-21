@@ -7,8 +7,7 @@
 postgresql_version: "12"
 
 # BEST PRACTICE: Отключаем логирование паролей в production
-# Временно отключено для отладки
-postgres_users_no_log: false
+postgres_users_no_log: true
 
 # Базовые пользователи PostgreSQL
 # ПРИМЕЧАНИЕ: Пользователь postgres создается автоматически при установке

@@ -40,8 +40,8 @@
         PGPASSWORD: "{{ replica_password }}"
       become: true
       become_user: postgres
-      # Временно отключено для отладки
-      no_log: false
+      # BEST PRACTICE: no_log скрывает пароли из логов
+      no_log: "{{ postgres_users_no_log }}"
       # BEST PRACTICE: Таймаут для длительных операций
       async: 1800
       poll: 10
