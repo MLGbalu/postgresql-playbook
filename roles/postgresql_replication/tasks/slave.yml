@@ -35,7 +35,7 @@
     - name: Replicate data from master using pg_basebackup
       # BEST PRACTICE: environment для передачи sensitive данных
       ansible.builtin.shell: |
-        pg_basebackup -w -h {{ postgres_master_ip }} -U repluser -D {{ postgresql_data_dir }} -P --xlog
+        pg_basebackup -w -h {{ postgres_master_ip }} -U repluser -D {{ postgresql_data_dir }} -P -Xs
       environment:
         PGPASSWORD: "{{ replica_password }}"
       become: true
