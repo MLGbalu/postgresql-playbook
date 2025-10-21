@@ -14,9 +14,9 @@
   # BEST PRACTICE: command вместо shell когда не нужны shell features
   ansible.builtin.command:
     cmd: mv main main-backup
-    chdir: "{{ postgresql_data_dir }}/.."
+    chdir: /var/lib/postgresql/{{ postgresql_version }}
     # BEST PRACTICE: creates предотвращает повторное выполнение
-    creates: "{{ postgresql_data_dir }}/../main-backup"
+    creates: /var/lib/postgresql/{{ postgresql_version }}/main-backup
   tags:
     - postgres_slave
     - replication
@@ -73,7 +73,7 @@
     - name: Restore backup
       ansible.builtin.command:
         cmd: mv main-backup main
-        chdir: "{{ postgresql_data_dir }}/.."
+        chdir: /var/lib/postgresql/{{ postgresql_version }}
 
     - name: Fail with clear message
       ansible.builtin.fail:
@@ -83,7 +83,7 @@
   always:
     - name: Remove backup directory if exists
       ansible.builtin.file:
-        path: "{{ postgresql_data_dir }}/../main-backup"
+        path: /var/lib/postgresql/{{ postgresql_version }}/main-backup
         state: absent
       # BEST PRACTICE: ignore_errors если бэкапа может не быть
       ignore_errors: true
