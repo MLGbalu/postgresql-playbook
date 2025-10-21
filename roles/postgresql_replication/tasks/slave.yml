@@ -54,15 +54,27 @@
         backup: true
       loop: "{{ postgresql_slave_config }}"
 
-    - name: Create recovery.conf from template
-      # BEST PRACTICE: template модуль вместо blockinfile
-      ansible.builtin.template:
-        src: recovery.conf.j2
-        dest: "{{ postgresql_config_path }}/recovery.conf"
+    - name: Create standby.signal file (PostgreSQL 12+)
+      # BEST PRACTICE: В PostgreSQL 12+ вместо recovery.conf используется standby.signal
+      ansible.builtin.file:
+        path: "{{ postgresql_data_dir }}/standby.signal"
+        state: touch
         mode: '0600'
         owner: postgres
         group: postgres
-        backup: true
+
+    - name: Configure replication parameters in postgresql.auto.conf
+      # BEST PRACTICE: В PostgreSQL 12+ параметры репликации в postgresql.auto.conf
+      ansible.builtin.lineinfile:
+        path: "{{ postgresql_data_dir }}/postgresql.auto.conf"
+        line: "{{ item }}"
+        create: yes
+        mode: '0600'
+        owner: postgres
+        group: postgres
+      loop:
+        - "primary_conninfo = '{{ recovery_config.primary_conninfo }}'"
+        - "restore_command = 'cp {{ postgresql_archive_dir }}/%f %p'"
 
   # BEST PRACTICE: rescue блок для rollback при ошибках
   rescue:

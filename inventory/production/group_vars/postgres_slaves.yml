@@ -25,3 +25,6 @@ recovery_config:
   standby_mode: 'on'
   primary_conninfo: "host={{ postgres_master_ip }} port=5432 user=repluser password={{ replica_password }} application_name=slave01"
   trigger_file: '/tmp/postgresql.trigger.5432'
+
+# Путь к директории архивов WAL (для restore_command)
+postgresql_archive_dir: "{{ postgresql_data_dir }}/../archive"
