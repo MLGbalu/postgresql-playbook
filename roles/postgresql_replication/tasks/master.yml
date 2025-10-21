@@ -37,7 +37,11 @@
     # BEST PRACTICE: Генерируем блок из переменных
     block: |
       {% for entry in postgresql_hba_entries %}
+      {% if entry.type == 'local' %}
+      {{ entry.type }} {{ entry.database }} {{ entry.user }} {{ entry.auth_method }}
+      {% else %}
       {{ entry.type }} {{ entry.database }} {{ entry.user }} {{ entry.address }} {{ entry.auth_method }}
+      {% endif %}
       {% endfor %}
     backup: true
   notify: reload postgresql

@@ -51,6 +51,19 @@ postgresql_archive_dir: "{{ postgresql_data_dir }}/../archive"
 # === pg_hba.conf настройки ===
 # BEST PRACTICE: Шаблонизация конфигурации вместо хардкода
 postgresql_hba_entries:
+  # Локальные подключения через Unix socket (ОБЯЗАТЕЛЬНО!)
+  - type: local
+    database: all
+    user: postgres
+    address: ''
+    auth_method: peer
+  
+  - type: local
+    database: all
+    user: all
+    address: ''
+    auth_method: peer
+  
   # Репликация с localhost
   - type: host
     database: replication
