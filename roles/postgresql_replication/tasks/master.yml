@@ -63,7 +63,8 @@
   become: true
   become_user: postgres
   # BEST PRACTICE: no_log скрывает пароли из логов
-  no_log: "{{ postgres_users_no_log }}"
+  # Временно отключено для отладки
+  no_log: false
   tags:
     - postgres_users
     - postgres_master
